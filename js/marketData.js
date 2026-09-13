@@ -57,10 +57,12 @@ async function callApi(params) {
   if (!res.ok) throw new Error(`Alpha Vantage error (HTTP ${res.status}).`);
   const data = await res.json();
 
-  if (data.Note || data.Information) {
-    throw new Error(
-      data.Note || data.Information || "Alpha Vantage rate limit reached — try again later."
-    );
+  // Alpha Vantage returns a throttle notice as "Note"/"Information" — but
+  // near the limit it can attach that note alongside otherwise-valid data,
+  // so only treat it as fatal when no real data came back with it.
+  const realDataKeys = Object.keys(data).filter((k) => k !== "Note" && k !== "Information");
+  if (realDataKeys.length === 0 && (data.Note || data.Information)) {
+    throw new Error(data.Note || data.Information);
   }
   if (data["Error Message"]) throw new Error("Symbol not found.");
 
@@ -125,11 +127,11 @@ export async function fetchStockData(symbol, { forceRefresh = false } = {}) {
   // Alpha Vantage's per-second/per-minute rate limits, which a burst of
   // parallel calls can trip.
   const quote = await callApi({ function: "GLOBAL_QUOTE", symbol });
-  await sleep(500);
+  await sleep(1100);
   const overview = await callApi({ function: "OVERVIEW", symbol });
-  await sleep(500);
+  await sleep(1100);
   const earnings = await callApi({ function: "EARNINGS", symbol });
-  await sleep(500);
+  await sleep(1100);
   const monthly = await callApi({ function: "TIME_SERIES_MONTHLY", symbol });
 
   const globalQuote = quote["Global Quote"] || {};
