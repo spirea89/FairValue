@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fair Value — Peter Lynch Stock Calculator</title>
+  <meta name="description" content="Estimate a stock's fair value using Peter Lynch's growth-based valuation formula, with live data from Yahoo Finance." />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <header class="page-header">
+    <h1>Fair Value Calculator</h1>
+    <p class="subtitle">Peter Lynch–style growth valuation, using live market data</p>
+  </header>
+
+  <main>
+    <section id="api-key-card" class="card api-key-card">
+      <p>
+        Data comes from <a href="https://www.alphavantage.co/support/#api-key" target="_blank" rel="noopener">Alpha Vantage</a>,
+        which needs a free API key (no credit card, instant signup).
+      </p>
+      <form id="api-key-form" class="api-key-form" autocomplete="off">
+        <label for="api-key" class="visually-hidden">Alpha Vantage API key</label>
+        <input id="api-key" type="text" placeholder="Paste your Alpha Vantage API key" />
+        <button type="submit">Save key</button>
+      </form>
+      <p class="hint">Stored only in your browser (localStorage) — never sent anywhere but Alpha Vantage.</p>
+    </section>
+
+    <form id="search-form" class="search-form" autocomplete="off">
+      <label for="ticker" class="visually-hidden">Stock ticker</label>
+      <input id="ticker" name="ticker" type="text" placeholder="Ticker, e.g. AAPL" required />
+      <button type="submit" id="search-btn">Calculate</button>
+    </form>
+
+    <p id="status" class="status" role="status" aria-live="polite"></p>
+
+    <section id="result" class="card result-card" hidden>
+      <div class="result-header">
+        <div>
+          <h2 id="company-name">—</h2>
+          <span id="company-symbol" class="ticker-badge">—</span>
+        </div>
+        <div id="verdict-badge" class="verdict-badge">—</div>
+      </div>
+      <p id="cache-note" class="hint"></p>
+
+      <div class="metrics-grid">
+        <div class="metric">
+          <span class="metric-label">Current price</span>
+          <span id="metric-price" class="metric-value">—</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">Fair value</span>
+          <span id="metric-fair-value" class="metric-value">—</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">Upside / downside</span>
+          <span id="metric-gap" class="metric-value">—</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">Trailing P/E</span>
+          <span id="metric-pe" class="metric-value">—</span>
+        </div>
+      </div>
+
+      <details class="assumptions" open>
+        <summary>Assumptions used (editable)</summary>
+        <p class="formula-note">
+          Fair value = EPS × Fair P/E, where Fair P/E = growth rate
+          <span id="dividend-formula-part">+ dividend yield</span> — Peter Lynch's rule that a
+          fairly priced growth stock trades at a P/E equal to its earnings growth rate.
+        </p>
+        <div class="assumptions-grid">
+          <label>
+            EPS (TTM)
+            <input id="input-eps" type="number" step="0.01" />
+          </label>
+          <label>
+            Growth rate (%/yr)
+            <input id="input-growth" type="number" step="0.1" />
+          </label>
+          <label>
+            Dividend yield (%)
+            <input id="input-dividend" type="number" step="0.01" />
+          </label>
+          <label class="checkbox-label">
+            <input id="input-include-dividend" type="checkbox" />
+            Credit dividend yield toward growth (PEGY)
+          </label>
+        </div>
+        <button type="button" id="recalc-btn">Recalculate</button>
+        <p id="growth-source-note" class="hint"></p>
+      </details>
+    </section>
+
+    <section id="chart-section" class="card" hidden>
+      <h2>Price history</h2>
+      <div class="chart-controls">
+        <label for="range-select">Range</label>
+        <select id="range-select">
+          <option value="1y">1Y</option>
+          <option value="5y" selected>5Y</option>
+          <option value="max">Max</option>
+        </select>
+      </div>
+      <canvas id="price-chart" height="120"></canvas>
+      <p class="hint">Dashed line marks today's computed fair value for reference.</p>
+    </section>
+  </main>
+
+  <footer class="page-footer">
+    <p>
+      Data from Alpha Vantage (delayed, free tier). Educational tool only —
+      not investment advice.
+    </p>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
