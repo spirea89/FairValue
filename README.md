@@ -34,9 +34,13 @@ one-time setup. The deployed URL is set in [`js/config.js`](./js/config.js).
 The growth rate is the 5-year historical EPS CAGR, computed from real
 annual filings via the **SEC's free EDGAR API** — `GOOGLEFINANCE()`'s own
 forward growth-estimate fields turned out to be unreliable and often blank.
-If a stock isn't SEC-registered (e.g. non-US listings), the app falls back
-to Google Finance's consensus growth estimate, and finally to manual entry
-if neither is available.
+This is best-effort: SEC's bot protection sometimes blocks automated
+traffic from shared cloud IPs (Google's included) with a 403, so the lookup
+can fail intermittently for reasons outside this app's control. If a stock
+isn't SEC-registered, or the SEC lookup fails, the app falls back to Google
+Finance's consensus growth estimate, and finally to manual entry if neither
+is available — this happens automatically and just means you may need to
+type in a growth rate yourself sometimes.
 
 This avoids the two alternatives that were tried and ruled out:
 
