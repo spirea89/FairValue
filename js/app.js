@@ -1,8 +1,8 @@
-import { fetchStockData, getApiKey, setApiKey } from "./marketData.js";
+import { fetchStockData } from "./marketData.js";
 import { computeFairValue, verdictFor } from "./lynch.js";
+import { APP_VERSION, BUILD_DATE } from "./version.js";
 
-const apiKeyForm = document.getElementById("api-key-form");
-const apiKeyInput = document.getElementById("api-key");
+document.getElementById("version-info").textContent = `Version ${APP_VERSION} · ${BUILD_DATE}`;
 
 const form = document.getElementById("search-form");
 const tickerInput = document.getElementById("ticker");
@@ -55,17 +55,6 @@ function setLoading(isLoading) {
   searchBtn.textContent = isLoading ? "Loading…" : "Calculate";
 }
 
-function initApiKey() {
-  const saved = getApiKey();
-  if (saved) apiKeyInput.value = saved;
-}
-
-apiKeyForm.addEventListener("submit", (e) => {
-  e.preventDefault();
-  setApiKey(apiKeyInput.value);
-  setStatus("API key saved.");
-});
-
 function readAssumptions() {
   return {
     eps: inputEps.value !== "" ? parseFloat(inputEps.value) : null,
@@ -111,30 +100,30 @@ function populateAssumptions(data) {
   inputIncludeDividend.checked = false;
   currentCurrency = data.currency;
 
-  const growth = data.growthEstimatePct ?? data.growthFallbackPct;
+  const growth = data.growthEstimatePct;
   if (growth != null) {
     inputGrowth.value = growth.toFixed(1);
-    growthSourceNote.textContent = data.growthEstimatePct != null
-      ? `Growth rate: ${data.growthSource}.`
-      : "Growth rate: latest quarterly YoY earnings growth (fallback — limited EPS history).";
+    growthSourceNote.textContent = `Growth rate: ${data.growthSource}.`;
   } else {
     inputGrowth.value = "";
     growthSourceNote.textContent = "No growth data available for this stock — enter a growth rate manually.";
   }
 }
 
-function rangeToMonths(range) {
-  if (range === "1y") return 12;
-  if (range === "5y") return 60;
+function rangeToYears(range) {
+  if (range === "1y") return 1;
+  if (range === "5y") return 5;
   return Infinity; // max
 }
 
 function drawPriceChart(range) {
-  const months = rangeToMonths(range);
-  const points = fullHistory.slice(-months);
+  const years = rangeToYears(range);
+  const points = Number.isFinite(years)
+    ? fullHistory.filter((p) => p.date >= new Date(Date.now() - years * 365 * 24 * 60 * 60 * 1000))
+    : fullHistory;
 
   const labels = points.map((p) =>
-    p.date.toLocaleDateString("en-US", { year: "numeric", month: "short" })
+    p.date.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
   );
   const closes = points.map((p) => p.close);
 
@@ -236,5 +225,3 @@ recalcBtn.addEventListener("click", updateResults);
 rangeSelect.addEventListener("change", () => {
   if (fullHistory.length) drawPriceChart(rangeSelect.value);
 });
-
-initApiKey();

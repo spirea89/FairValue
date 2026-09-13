@@ -1,21 +1,16 @@
-// Client-side access to Alpha Vantage (https://www.alphavantage.co) — a free,
-// keyed market-data API that sends proper CORS headers, so it works directly
-// from a static site with no backend or proxy.
+// Data layer backed by a Google Sheet (via a small Apps Script Web App) that
+// uses GOOGLEFINANCE() — see google-apps-script/README.md for setup. Chosen
+// over third-party APIs (Yahoo Finance, Alpha Vantage, Financial Modeling
+// Prep) because it needs no per-visitor API key and isn't bound by a small
+// shared daily request quota: it runs against the app owner's own Google
+// account.
 //
-// The free tier is limited (currently 25 requests/day), so responses are
-// cached in localStorage per symbol for a while to stretch that quota.
+// Results are still cached in localStorage per symbol for a while, mostly
+// to keep repeat lookups fast and be polite to the underlying sheet.
 
-const API_BASE = "https://www.alphavantage.co/query";
+import { SHEETS_API_URL } from "./config.js";
+
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
-const API_KEY_STORAGE_KEY = "fairvalue.alphaVantageApiKey";
-
-export function getApiKey() {
-  return localStorage.getItem(API_KEY_STORAGE_KEY) || "";
-}
-
-export function setApiKey(key) {
-  localStorage.setItem(API_KEY_STORAGE_KEY, key.trim());
-}
 
 function cacheKey(symbol) {
   return `fairvalue.cache.${symbol.toUpperCase()}`;
@@ -44,120 +39,61 @@ function writeCache(symbol, data) {
   }
 }
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-async function callApi(params) {
-  const apiKey = getApiKey();
-  if (!apiKey) throw new Error("Add your free Alpha Vantage API key above to fetch data.");
-
-  const url = new URL(API_BASE);
-  Object.entries({ ...params, apikey: apiKey }).forEach(([k, v]) => url.searchParams.set(k, v));
-
-  const res = await fetch(url.toString());
-  if (!res.ok) throw new Error(`Alpha Vantage error (HTTP ${res.status}).`);
-  const data = await res.json();
-
-  // Alpha Vantage returns a throttle notice as "Note"/"Information" — but
-  // near the limit it can attach that note alongside otherwise-valid data,
-  // so only treat it as fatal when no real data came back with it.
-  const realDataKeys = Object.keys(data).filter((k) => k !== "Note" && k !== "Information");
-  if (realDataKeys.length === 0 && (data.Note || data.Information)) {
-    throw new Error(data.Note || data.Information);
-  }
-  if (data["Error Message"]) throw new Error("Symbol not found.");
-
-  return data;
-}
-
 function toNumber(value) {
-  if (value == null || value === "None" || value === "") return null;
+  if (value == null || value === "") return null;
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
 }
 
-/**
- * Computes an annualized EPS growth rate (%) from up to `years` of annual EPS
- * history. Alpha Vantage sometimes prepends a stub entry for the current,
- * still-in-progress fiscal year (a partial-year EPS masquerading as annual),
- * which would badly understate growth — so entries are first restricted to
- * whichever fiscal-year-end (month/day) appears most often in the series.
- */
-function computeEpsCagr(annualEarnings, years = 5) {
-  const parsed = (annualEarnings || [])
-    .map((e) => ({ date: new Date(e.fiscalDateEnding), eps: toNumber(e.reportedEPS) }))
-    .filter((e) => e.eps != null && !Number.isNaN(e.date.getTime()));
-
-  if (parsed.length < 2) return null;
-
-  const dayKey = (d) => `${d.getMonth()}-${d.getDate()}`;
-  const counts = new Map();
-  parsed.forEach((e) => {
-    const key = dayKey(e.date);
-    counts.set(key, (counts.get(key) || 0) + 1);
-  });
-  const modalKey = [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0];
-
-  const series = parsed
-    .filter((e) => dayKey(e.date) === modalKey)
-    .sort((a, b) => b.date - a.date) // most recent first
-    .slice(0, years + 1)
-    .map((e) => e.eps);
-
-  if (series.length < 2) return null;
-  const latest = series[0];
-  const oldest = series[series.length - 1];
-  const periods = series.length - 1;
-
-  if (latest <= 0 || oldest <= 0) return null; // CAGR is meaningless across sign changes
-  const cagr = (Math.pow(latest / oldest, 1 / periods) - 1) * 100;
-  return Number.isFinite(cagr) ? cagr : null;
+/** Growth rate (%) implied by next year's vs. this year's consensus EPS estimate. */
+function computeForwardEpsGrowth(epsCurrentYear, epsNextYear) {
+  if (epsCurrentYear == null || epsNextYear == null || epsCurrentYear <= 0) return null;
+  const growth = ((epsNextYear - epsCurrentYear) / epsCurrentYear) * 100;
+  return Number.isFinite(growth) ? growth : null;
 }
 
 /**
  * Fetches everything needed for the Lynch fair value calc plus a price chart,
- * using a per-symbol cache to conserve the free daily request quota.
+ * using a per-symbol cache to avoid refetching on every visit.
  */
 export async function fetchStockData(symbol, { forceRefresh = false } = {}) {
+  if (!SHEETS_API_URL) {
+    throw new Error(
+      "No data source configured yet — deploy the Google Apps Script (see google-apps-script/README.md) and set SHEETS_API_URL in js/config.js."
+    );
+  }
+
   if (!forceRefresh) {
     const cached = readCache(symbol);
     if (cached) return { ...cached, fromCache: true };
   }
 
-  // Called sequentially with a short stagger (not Promise.all) to stay under
-  // Alpha Vantage's per-second/per-minute rate limits, which a burst of
-  // parallel calls can trip.
-  const quote = await callApi({ function: "GLOBAL_QUOTE", symbol });
-  await sleep(1100);
-  const overview = await callApi({ function: "OVERVIEW", symbol });
-  await sleep(1100);
-  const earnings = await callApi({ function: "EARNINGS", symbol });
-  await sleep(1100);
-  const monthly = await callApi({ function: "TIME_SERIES_MONTHLY", symbol });
+  const url = new URL(SHEETS_API_URL);
+  url.searchParams.set("symbol", symbol);
 
-  const globalQuote = quote["Global Quote"] || {};
-  const currentPrice = toNumber(globalQuote["05. price"]);
-  if (!overview.Symbol && currentPrice == null) throw new Error("Symbol not found.");
+  const res = await fetch(url.toString());
+  if (!res.ok) throw new Error(`Data source error (HTTP ${res.status}).`);
+  const data = await res.json();
 
-  const series = monthly["Monthly Time Series"] || {};
-  const history = Object.entries(series)
-    .map(([date, values]) => ({ date: new Date(date), close: toNumber(values["4. close"]) }))
-    .filter((p) => p.close != null)
+  if (data.error) throw new Error(data.error);
+
+  const history = (data.history || [])
+    .map((row) => ({ date: new Date(row.date), close: toNumber(row.close) }))
+    .filter((p) => p.close != null && !Number.isNaN(p.date.getTime()))
     .sort((a, b) => a.date - b.date);
 
-  const growthFromEarnings = computeEpsCagr(earnings.annualEarnings);
-  const growthFromOverview = toNumber(overview.QuarterlyEarningsGrowthYOY);
+  const growthEstimatePct = computeForwardEpsGrowth(data.epsCurrentYear, data.epsNextYear);
 
   const result = {
-    symbol: (overview.Symbol || symbol).toUpperCase(),
-    companyName: overview.Name || symbol.toUpperCase(),
-    currency: overview.Currency || "USD",
-    currentPrice,
-    trailingEps: toNumber(overview.EPS),
-    trailingPE: toNumber(overview.PERatio),
-    dividendYieldPct: toNumber(overview.DividendYield) != null ? toNumber(overview.DividendYield) * 100 : null,
-    growthEstimatePct: growthFromEarnings,
-    growthSource: growthFromEarnings != null ? "5-year historical EPS CAGR" : null,
-    growthFallbackPct: growthFromOverview != null ? growthFromOverview * 100 : null,
+    symbol: (data.symbol || symbol).toUpperCase(),
+    companyName: data.name || symbol.toUpperCase(),
+    currency: data.currency || "USD",
+    currentPrice: toNumber(data.price),
+    trailingEps: toNumber(data.eps),
+    trailingPE: toNumber(data.pe),
+    dividendYieldPct: null, // not exposed by GOOGLEFINANCE — enter manually if known
+    growthEstimatePct,
+    growthSource: growthEstimatePct != null ? "next-year consensus EPS growth estimate" : null,
     history,
   };
 

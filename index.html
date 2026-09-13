@@ -14,19 +14,6 @@
   </header>
 
   <main>
-    <section id="api-key-card" class="card api-key-card">
-      <p>
-        Data comes from <a href="https://www.alphavantage.co/support/#api-key" target="_blank" rel="noopener">Alpha Vantage</a>,
-        which needs a free API key (no credit card, instant signup).
-      </p>
-      <form id="api-key-form" class="api-key-form" autocomplete="off">
-        <label for="api-key" class="visually-hidden">Alpha Vantage API key</label>
-        <input id="api-key" type="text" placeholder="Paste your Alpha Vantage API key" />
-        <button type="submit">Save key</button>
-      </form>
-      <p class="hint">Stored only in your browser (localStorage) — never sent anywhere but Alpha Vantage.</p>
-    </section>
-
     <form id="search-form" class="search-form" autocomplete="off">
       <label for="ticker" class="visually-hidden">Stock ticker</label>
       <input id="ticker" name="ticker" type="text" placeholder="Ticker, e.g. AAPL" required />
@@ -111,9 +98,10 @@
 
   <footer class="page-footer">
     <p>
-      Data from Alpha Vantage (delayed, free tier). Educational tool only —
+      Data from Google Finance, via a Google Sheet. Educational tool only —
       not investment advice.
     </p>
+    <p id="version-info" class="version-info"></p>
   </footer>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>

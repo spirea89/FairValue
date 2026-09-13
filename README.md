@@ -2,7 +2,7 @@
 
 A small web app that estimates a stock's fair value using **Peter Lynch's**
 growth-based valuation rule of thumb, with live price and fundamentals data
-pulled from Alpha Vantage in the browser. No backend, no build step — pure
+pulled from Google Finance. No backend server, no build step — pure
 HTML/CSS/JS, deployable straight to GitHub Pages.
 
 ## How it works
@@ -18,24 +18,38 @@ Fair P/E   = growth rate  (+ dividend yield, if enabled)
 Fair Value = EPS (TTM) × Fair P/E
 ```
 
-The app pre-fills EPS, dividend yield, and a growth rate (the trailing
-5-year EPS CAGR, computed from annual earnings history) automatically, but
-every input is editable so you can plug in your own assumptions.
+The app pre-fills EPS and a growth rate (the next-year consensus EPS growth
+estimate) automatically, but every input is editable so you can plug in your
+own assumptions. Dividend yield isn't available from this data source, so
+enter it manually if you want to include it.
 
 ## Data source
 
-Fundamentals and historical prices come from
-[Alpha Vantage](https://www.alphavantage.co), a free market-data API that
-supports direct browser requests (unlike Yahoo Finance's endpoints, which
-now require server-side authentication and can't be called from a static
-site). Alpha Vantage requires a free API key — no credit card, signup takes
-under a minute at https://www.alphavantage.co/support/#api-key.
+Fundamentals and historical prices come from **Google Finance**, via a
+Google Sheet that uses the `GOOGLEFINANCE()` function, wrapped in a small
+Apps Script "Web App" that serves it as JSON — see
+[`google-apps-script/README.md`](./google-apps-script/README.md) for the
+one-time setup. The deployed URL is set in [`js/config.js`](./js/config.js).
 
-The app asks for this key on first use and stores it only in the browser's
-`localStorage`; it's never committed to the repo or sent anywhere but Alpha
-Vantage. The free tier is capped at **25 requests/day**, and each stock
-lookup uses 4 of them, so results are cached locally per symbol for 6 hours
-to stretch that quota.
+This avoids the two alternatives that were tried and ruled out:
+
+- **Yahoo Finance** — its endpoints now require server-side authentication
+  (a "crumb" token) and reject unauthenticated browser requests, so a static
+  site can't call them at all anymore.
+- **Third-party APIs (Alpha Vantage, Financial Modeling Prep)** — both work,
+  but require every visitor to have their own API key and are capped by a
+  small shared daily request quota, which real usage burns through fast.
+
+Because the Google Sheet approach runs against the app owner's own Google
+account rather than a shared per-key quota, it works for every visitor with
+no setup on their end.
+
+## Versioning
+
+The footer shows the running build's version and date, so you can tell if
+your browser has the latest deploy — compare it against the version in
+[js/version.js on `main`](https://github.com/spirea89/FairValue/blob/main/js/version.js).
+If it's out of date, hard-refresh (Cmd/Ctrl+Shift+R) to bypass any cached copy.
 
 ## Running locally
 

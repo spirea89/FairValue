@@ -78,40 +78,6 @@ main {
   clip: rect(0 0 0 0);
 }
 
-.api-key-card {
-  padding: 16px 20px;
-  margin-bottom: 16px;
-}
-
-.api-key-card p {
-  margin: 0 0 10px;
-  font-size: 0.9rem;
-}
-
-.api-key-form {
-  display: flex;
-  gap: 10px;
-}
-
-.api-key-form input {
-  flex: 1;
-  padding: 9px 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg);
-  color: var(--text);
-}
-
-.api-key-form button {
-  padding: 9px 16px;
-  border: none;
-  border-radius: 8px;
-  background: var(--accent);
-  color: var(--accent-contrast);
-  font-weight: 600;
-  cursor: pointer;
-}
-
 .search-form {
   display: flex;
   gap: 10px;
@@ -325,6 +291,13 @@ main {
   border: 1px solid var(--border);
   background: var(--bg);
   color: var(--text);
+}
+
+.version-info {
+  margin-top: 4px;
+  opacity: 0.7;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
 }
 
 .page-footer {
