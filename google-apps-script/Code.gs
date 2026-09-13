@@ -1,34 +1,43 @@
 /**
  * Turns this Spreadsheet into a small JSON API for the Fair Value app,
- * combining GOOGLEFINANCE() (price, EPS, P/E, historical prices) with the
- * SEC's free EDGAR API (real historical EPS, for a proper earnings growth
- * rate — GOOGLEFINANCE's own growth-estimate fields are unreliable and
- * often blank).
+ * combining GOOGLEFINANCE() (price, EPS, P/E, historical prices) with two
+ * external sources for a real earnings growth rate — GOOGLEFINANCE's own
+ * growth-estimate fields are unreliable and often blank:
  *
- * The SEC lookup is best-effort: SEC's Akamai bot protection sometimes
- * blocks automated traffic from shared cloud IPs (including Google's), so
- * it can 403 intermittently regardless of how correctly this is written.
- * When that happens, this falls back to Google Finance's own growth
- * estimate, and finally to the app asking the user to enter one manually.
+ *  1. Nasdaq's public financials API — 4 years of annual Net Income, used
+ *     to compute a CAGR. Tried first: reliable in practice, no bot-blocking
+ *     observed. Net Income CAGR is a close but imperfect stand-in for EPS
+ *     CAGR (they diverge if share count has moved a lot from buybacks).
+ *  2. The SEC's free EDGAR API — real historical per-share EPS, which is
+ *     what Lynch's formula actually wants. Tried second, as a bonus: SEC's
+ *     Akamai bot protection sometimes blocks automated traffic from shared
+ *     cloud IPs (including Google's) with a 403, so this can fail
+ *     intermittently for reasons outside this script's control.
+ *
+ * If both fail, this falls back to Google Finance's own growth estimate,
+ * and finally to the app asking the user to enter a growth rate manually.
  *
  * Setup: see ../google-apps-script/README.md for the sheet layout this
  * expects and how to deploy this as a Web App.
  *
  * Usage once deployed: GET <web-app-url>?symbol=AAPL
  *
- * One-time setup: this script calls out to sec.gov, which Google requires
- * you to explicitly authorize. Select "authorizeExternalRequests" in the
- * function dropdown (top toolbar, next to Run) and click Run once — that
- * triggers the authorization prompt. Click through it (Review Permissions →
- * your account → Advanced → "Go to (project) (unsafe)" → Allow), then check
- * the Execution log (View → Executions, or Ctrl/Cmd+Enter) for the result.
+ * One-time setup: this script calls out to external sites (sec.gov,
+ * nasdaq.com), which Google requires you to explicitly authorize. Select
+ * "authorizeExternalRequests" in the function dropdown (top toolbar, next
+ * to Run) and click Run once — that triggers the authorization prompt.
+ * Click through it (Review Permissions → your account → Advanced → "Go to
+ * (project) (unsafe)" → Allow), then check the Execution log (View →
+ * Executions, or Ctrl/Cmd+Enter) for the result.
  */
 
 function authorizeExternalRequests() {
+  Logger.log('3y net income CAGR for AAPL (Nasdaq): ' + getNetIncomeCagrFromNasdaq('AAPL') + '%');
+
   var cik = getCikForSymbol('AAPL');
-  Logger.log('CIK for AAPL: ' + cik);
+  Logger.log('CIK for AAPL (SEC): ' + cik);
   if (cik) {
-    Logger.log('5y EPS CAGR for AAPL: ' + getEpsCagrFromSec(cik) + '%');
+    Logger.log('5y EPS CAGR for AAPL (SEC): ' + getEpsCagrFromSec(cik) + '%');
   }
 }
 
@@ -52,6 +61,11 @@ var HISTORY_MAX_ROWS = 1900; // ~5 years of trading days, with headroom
 // fine; it doesn't need to be verified or personal.
 var SEC_USER_AGENT = 'FairValueApp/1.0 (+https://github.com/spirea89/FairValue)';
 var SEC_EPS_TAGS = ['EarningsPerShareDiluted', 'EarningsPerShareBasic'];
+
+// Nasdaq's API expects a browser-like User-Agent — it 403s on generic/bot
+// user agents (unlike SEC, it doesn't ask for an identifying one instead).
+var NASDAQ_USER_AGENT =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 function doGet(e) {
   var lock = LockService.getScriptLock();
@@ -99,14 +113,23 @@ function doGet(e) {
     var growthEstimatePct = null;
     var growthSource = null;
 
-    var cik = getCikForSymbol(symbol);
-    if (cik) {
-      var secGrowth = getEpsCagrFromSec(cik);
-      if (secGrowth != null) {
-        growthEstimatePct = secGrowth;
-        growthSource = '5-year historical EPS CAGR (SEC EDGAR filings)';
+    var nasdaqGrowth = getNetIncomeCagrFromNasdaq(symbol);
+    if (nasdaqGrowth != null) {
+      growthEstimatePct = nasdaqGrowth;
+      growthSource = '3-year historical net income CAGR (Nasdaq)';
+    }
+
+    if (growthEstimatePct == null) {
+      var cik = getCikForSymbol(symbol);
+      if (cik) {
+        var secGrowth = getEpsCagrFromSec(cik);
+        if (secGrowth != null) {
+          growthEstimatePct = secGrowth;
+          growthSource = '5-year historical EPS CAGR (SEC EDGAR filings)';
+        }
       }
     }
+
     if (growthEstimatePct == null && typeof epsCurrentYear === 'number' && typeof epsNextYear === 'number' && epsCurrentYear > 0) {
       growthEstimatePct = ((epsNextYear - epsCurrentYear) / epsCurrentYear) * 100;
       growthSource = 'next-year consensus EPS growth estimate (Google Finance)';
@@ -225,6 +248,59 @@ function tryEpsTag(cik, tag) {
 
   var cagr = (Math.pow(latest / oldest, 1 / periods) - 1) * 100;
   return isFinite(cagr) ? cagr : null;
+}
+
+/** Computes an annualized growth rate (%) from up to 4 years of Nasdaq-reported annual net income. */
+function getNetIncomeCagrFromNasdaq(symbol) {
+  var url = 'https://api.nasdaq.com/api/company/' + symbol + '/financials?frequency=1';
+  var resp;
+  try {
+    resp = UrlFetchApp.fetch(url, {
+      headers: { 'User-Agent': NASDAQ_USER_AGENT, Accept: 'application/json' },
+      muteHttpExceptions: true,
+    });
+  } catch (err) {
+    return null;
+  }
+  if (resp.getResponseCode() !== 200) return null;
+
+  var data = JSON.parse(resp.getContentText());
+  var rows = data.data && data.data.incomeStatementTable && data.data.incomeStatementTable.rows;
+  if (!rows) return null;
+
+  var netIncomeRow = null;
+  for (var i = 0; i < rows.length; i++) {
+    if (rows[i].value1 === 'Net Income') {
+      netIncomeRow = rows[i];
+      break;
+    }
+  }
+  if (!netIncomeRow) return null;
+
+  // value2 is the most recent year, value5 the oldest of the 4 shown.
+  var series = [netIncomeRow.value2, netIncomeRow.value3, netIncomeRow.value4, netIncomeRow.value5]
+    .map(parseMoney)
+    .filter(function (v) {
+      return v != null;
+    });
+
+  if (series.length < 2) return null;
+  var latest = series[0];
+  var oldest = series[series.length - 1];
+  var periods = series.length - 1;
+  if (latest <= 0 || oldest <= 0) return null; // CAGR is meaningless across sign changes
+
+  var cagr = (Math.pow(latest / oldest, 1 / periods) - 1) * 100;
+  return isFinite(cagr) ? cagr : null;
+}
+
+/** Parses a Nasdaq-style money string like "$112,010,000" or "--" into a number (or null). */
+function parseMoney(str) {
+  if (typeof str !== 'string') return null;
+  var cleaned = str.replace(/[$,]/g, '').trim();
+  if (cleaned === '' || cleaned === '--') return null;
+  var n = Number(cleaned);
+  return isFinite(n) ? n : null;
 }
 
 function jsonResponse(obj) {

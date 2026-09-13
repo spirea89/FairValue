@@ -31,16 +31,23 @@ App" that serves it as JSON — see
 [`google-apps-script/README.md`](./google-apps-script/README.md) for the
 one-time setup. The deployed URL is set in [`js/config.js`](./js/config.js).
 
-The growth rate is the 5-year historical EPS CAGR, computed from real
-annual filings via the **SEC's free EDGAR API** — `GOOGLEFINANCE()`'s own
-forward growth-estimate fields turned out to be unreliable and often blank.
-This is best-effort: SEC's bot protection sometimes blocks automated
-traffic from shared cloud IPs (Google's included) with a 403, so the lookup
-can fail intermittently for reasons outside this app's control. If a stock
-isn't SEC-registered, or the SEC lookup fails, the app falls back to Google
-Finance's consensus growth estimate, and finally to manual entry if neither
-is available — this happens automatically and just means you may need to
-type in a growth rate yourself sometimes.
+The growth rate tries three real data sources, in order, before asking for
+manual entry — `GOOGLEFINANCE()`'s own forward growth-estimate fields
+turned out to be unreliable and often blank:
+
+1. **Nasdaq's public financials API** — a 3-year CAGR from annual net
+   income. Reliable in practice, though net income growth is a close but
+   imperfect stand-in for EPS growth (they diverge if share count has moved
+   a lot from buybacks).
+2. **The SEC's free EDGAR API** — a 5-year CAGR from real historical
+   per-share EPS, which is what Lynch's formula actually wants. This is
+   best-effort: SEC's bot protection sometimes blocks automated traffic
+   from shared cloud IPs (Google's included) with a 403, so it can fail
+   intermittently for reasons outside this app's control.
+3. **Google Finance's consensus growth estimate**, if the above both fail.
+
+If none of them have data for a stock, the app asks you to enter a growth
+rate manually — this happens automatically.
 
 This avoids the two alternatives that were tried and ruled out:
 
