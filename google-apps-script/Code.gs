@@ -115,7 +115,9 @@ function getCikForSymbol(symbol, debug) {
   var cache = CacheService.getScriptCache();
   var cacheKey = 'cik_' + symbol;
   var cached = cache.get(cacheKey);
-  if (cached != null) {
+  // Guard against a stale bad value from an older version of this script
+  // that used to cache the literal string "null" as a negative result.
+  if (cached != null && /^\d{10}$/.test(cached)) {
     debug.cikSource = 'cache';
     return cached;
   }
