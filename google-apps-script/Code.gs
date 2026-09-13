@@ -9,7 +9,26 @@
  * expects and how to deploy this as a Web App.
  *
  * Usage once deployed: GET <web-app-url>?symbol=AAPL
+ *
+ * One-time setup: this script calls out to sec.gov, which Google requires
+ * you to explicitly authorize. Select "authorizeExternalRequests" in the
+ * function dropdown (top toolbar, next to Run) and click Run once — that
+ * triggers the authorization prompt. Click through it (Review Permissions →
+ * your account → Advanced → "Go to (project) (unsafe)" → Allow), then check
+ * the Execution log (View → Executions, or Ctrl/Cmd+Enter) for the result.
  */
+
+function authorizeExternalRequests() {
+  var debug = {};
+  var cik = getCikForSymbol('AAPL', debug);
+  Logger.log('CIK for AAPL: ' + cik);
+  Logger.log('Debug: ' + JSON.stringify(debug));
+  if (cik) {
+    var growth = getEpsCagrFromSec(cik, debug);
+    Logger.log('5y EPS CAGR for AAPL: ' + growth + '%');
+    Logger.log('Debug: ' + JSON.stringify(debug));
+  }
+}
 
 var SHEET_NAME = 'Engine';
 var TICKER_CELL = 'B1';
@@ -112,6 +131,7 @@ function doGet(e) {
 
 /** Resolves a ticker to its 10-digit SEC CIK via SEC's public ticker index, caching the result. */
 function getCikForSymbol(symbol, debug) {
+  debug = debug || {};
   var cache = CacheService.getScriptCache();
   var cacheKey = 'cik_' + symbol;
   var cached = cache.get(cacheKey);
@@ -163,6 +183,7 @@ function getEpsCagrFromSec(cik, debug) {
 }
 
 function tryEpsTag(cik, tag, debug) {
+  debug = debug || {};
   var url = 'https://data.sec.gov/api/xbrl/companyconcept/CIK' + cik + '/us-gaap/' + tag + '.json';
   var resp;
   try {
