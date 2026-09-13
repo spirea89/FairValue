@@ -1,9 +1,10 @@
 // Data layer backed by a Google Sheet (via a small Apps Script Web App) that
-// uses GOOGLEFINANCE() — see google-apps-script/README.md for setup. Chosen
-// over third-party APIs (Yahoo Finance, Alpha Vantage, Financial Modeling
-// Prep) because it needs no per-visitor API key and isn't bound by a small
-// shared daily request quota: it runs against the app owner's own Google
-// account.
+// combines GOOGLEFINANCE() (price, EPS, P/E, historical prices) with the
+// SEC's free EDGAR API (real historical EPS, for the growth rate) — see
+// google-apps-script/README.md for setup. Chosen over third-party APIs
+// (Yahoo Finance, Alpha Vantage, Financial Modeling Prep) because it needs
+// no per-visitor API key and isn't bound by a small shared daily request
+// quota: it runs against the app owner's own Google account.
 //
 // Results are still cached in localStorage per symbol for a while, mostly
 // to keep repeat lookups fast and be polite to the underlying sheet.
@@ -45,13 +46,6 @@ function toNumber(value) {
   return Number.isFinite(n) ? n : null;
 }
 
-/** Growth rate (%) implied by next year's vs. this year's consensus EPS estimate. */
-function computeForwardEpsGrowth(epsCurrentYear, epsNextYear) {
-  if (epsCurrentYear == null || epsNextYear == null || epsCurrentYear <= 0) return null;
-  const growth = ((epsNextYear - epsCurrentYear) / epsCurrentYear) * 100;
-  return Number.isFinite(growth) ? growth : null;
-}
-
 /**
  * Fetches everything needed for the Lynch fair value calc plus a price chart,
  * using a per-symbol cache to avoid refetching on every visit.
@@ -82,8 +76,6 @@ export async function fetchStockData(symbol, { forceRefresh = false } = {}) {
     .filter((p) => p.close != null && !Number.isNaN(p.date.getTime()))
     .sort((a, b) => a.date - b.date);
 
-  const growthEstimatePct = computeForwardEpsGrowth(data.epsCurrentYear, data.epsNextYear);
-
   const result = {
     symbol: (data.symbol || symbol).toUpperCase(),
     companyName: data.name || symbol.toUpperCase(),
@@ -92,8 +84,8 @@ export async function fetchStockData(symbol, { forceRefresh = false } = {}) {
     trailingEps: toNumber(data.eps),
     trailingPE: toNumber(data.pe),
     dividendYieldPct: null, // not exposed by GOOGLEFINANCE — enter manually if known
-    growthEstimatePct,
-    growthSource: growthEstimatePct != null ? "next-year consensus EPS growth estimate" : null,
+    growthEstimatePct: toNumber(data.growthEstimatePct),
+    growthSource: data.growthSource || null,
     history,
   };
 

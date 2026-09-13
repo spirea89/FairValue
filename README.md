@@ -18,18 +18,25 @@ Fair P/E   = growth rate  (+ dividend yield, if enabled)
 Fair Value = EPS (TTM) × Fair P/E
 ```
 
-The app pre-fills EPS and a growth rate (the next-year consensus EPS growth
-estimate) automatically, but every input is editable so you can plug in your
-own assumptions. Dividend yield isn't available from this data source, so
-enter it manually if you want to include it.
+The app pre-fills EPS and a growth rate automatically, but every input is
+editable so you can plug in your own assumptions. Dividend yield isn't
+available from this data source, so enter it manually if you want to
+include it.
 
 ## Data source
 
-Fundamentals and historical prices come from **Google Finance**, via a
-Google Sheet that uses the `GOOGLEFINANCE()` function, wrapped in a small
-Apps Script "Web App" that serves it as JSON — see
+Price, EPS, and P/E come from **Google Finance**, via a Google Sheet that
+uses the `GOOGLEFINANCE()` function, wrapped in a small Apps Script "Web
+App" that serves it as JSON — see
 [`google-apps-script/README.md`](./google-apps-script/README.md) for the
 one-time setup. The deployed URL is set in [`js/config.js`](./js/config.js).
+
+The growth rate is the 5-year historical EPS CAGR, computed from real
+annual filings via the **SEC's free EDGAR API** — `GOOGLEFINANCE()`'s own
+forward growth-estimate fields turned out to be unreliable and often blank.
+If a stock isn't SEC-registered (e.g. non-US listings), the app falls back
+to Google Finance's consensus growth estimate, and finally to manual entry
+if neither is available.
 
 This avoids the two alternatives that were tried and ruled out:
 
