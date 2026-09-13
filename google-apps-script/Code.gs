@@ -77,10 +77,12 @@ function doGet(e) {
 
     var growthEstimatePct = null;
     var growthSource = null;
+    var debug = {};
 
-    var cik = getCikForSymbol(symbol);
+    var cik = getCikForSymbol(symbol, debug);
+    debug.cik = cik;
     if (cik) {
-      var secGrowth = getEpsCagrFromSec(cik);
+      var secGrowth = getEpsCagrFromSec(cik, debug);
       if (secGrowth != null) {
         growthEstimatePct = secGrowth;
         growthSource = '5-year historical EPS CAGR (SEC EDGAR filings)';
@@ -101,6 +103,7 @@ function doGet(e) {
       growthEstimatePct: growthEstimatePct,
       growthSource: growthSource,
       history: history,
+      _debug: debug, // TEMPORARY — remove once growth-rate lookups are confirmed working
     });
   } finally {
     lock.releaseLock();
@@ -108,11 +111,14 @@ function doGet(e) {
 }
 
 /** Resolves a ticker to its 10-digit SEC CIK via SEC's public ticker index, caching the result. */
-function getCikForSymbol(symbol) {
+function getCikForSymbol(symbol, debug) {
   var cache = CacheService.getScriptCache();
   var cacheKey = 'cik_' + symbol;
   var cached = cache.get(cacheKey);
-  if (cached != null) return cached === 'null' ? null : cached;
+  if (cached != null) {
+    debug.cikSource = 'cache';
+    return cached;
+  }
 
   var cik = null;
   try {
@@ -120,6 +126,7 @@ function getCikForSymbol(symbol) {
       headers: { 'User-Agent': SEC_USER_AGENT },
       muteHttpExceptions: true,
     });
+    debug.tickerLookupStatus = resp.getResponseCode();
     if (resp.getResponseCode() === 200) {
       var data = JSON.parse(resp.getContentText());
       var keys = Object.keys(data);
@@ -130,33 +137,43 @@ function getCikForSymbol(symbol) {
           break;
         }
       }
+    } else {
+      debug.tickerLookupBody = resp.getContentText().slice(0, 200);
     }
   } catch (err) {
-    cik = null;
+    debug.tickerLookupError = String(err);
   }
 
-  cache.put(cacheKey, cik === null ? 'null' : cik, 21600); // 6h — SEC's max cache TTL
+  // Only cache a successful match. A miss might be a transient error (rate
+  // limit, missing authorization, network blip) rather than a real "this
+  // ticker isn't SEC-registered" — caching that for 6h would mask a fix.
+  if (cik !== null) cache.put(cacheKey, cik, 21600); // 6h — SEC's max cache TTL
   return cik;
 }
 
 /** Computes an annualized EPS growth rate (%) from up to 5 years of SEC-reported annual EPS. */
-function getEpsCagrFromSec(cik) {
+function getEpsCagrFromSec(cik, debug) {
   for (var t = 0; t < SEC_EPS_TAGS.length; t++) {
-    var result = tryEpsTag(cik, SEC_EPS_TAGS[t]);
+    var result = tryEpsTag(cik, SEC_EPS_TAGS[t], debug);
     if (result != null) return result;
   }
   return null;
 }
 
-function tryEpsTag(cik, tag) {
+function tryEpsTag(cik, tag, debug) {
   var url = 'https://data.sec.gov/api/xbrl/companyconcept/CIK' + cik + '/us-gaap/' + tag + '.json';
   var resp;
   try {
     resp = UrlFetchApp.fetch(url, { headers: { 'User-Agent': SEC_USER_AGENT }, muteHttpExceptions: true });
   } catch (err) {
+    debug['epsTagError_' + tag] = String(err);
     return null;
   }
-  if (resp.getResponseCode() !== 200) return null;
+  debug['epsTagStatus_' + tag] = resp.getResponseCode();
+  if (resp.getResponseCode() !== 200) {
+    debug['epsTagBody_' + tag] = resp.getContentText().slice(0, 200);
+    return null;
+  }
 
   var data = JSON.parse(resp.getContentText());
   var units = (data.units && data.units['USD/shares']) || [];
@@ -190,6 +207,7 @@ function tryEpsTag(cik, tag) {
       return u.val;
     });
 
+  debug['epsSeriesLength_' + tag] = series.length;
   if (series.length < 2) return null;
   var latest = series[0];
   var oldest = series[series.length - 1];
