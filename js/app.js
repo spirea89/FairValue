@@ -4,7 +4,11 @@
 //  - "elevenlabs": ElevenLabs' TTS API — much more natural/human-sounding,
 //    needs the user's own free API key (their quota, their key — never
 //    committed to this repo, stored only in localStorage).
+// Texts can also be saved to/loaded from this repo (js/library.js).
 
+import { fetchLibrary, saveLibraryEntry, deleteLibraryEntry } from "./library.js";
+
+const titleInput = document.getElementById("title-input");
 const textInput = document.getElementById("text-input");
 const charCount = document.getElementById("char-count");
 const voiceSelect = document.getElementById("voice-select");
@@ -25,6 +29,13 @@ const elevenlabsControls = document.getElementById("elevenlabs-controls");
 const elevenlabsHint = document.getElementById("elevenlabs-hint");
 const elevenlabsKeyInput = document.getElementById("elevenlabs-key");
 const elevenlabsVoiceSelect = document.getElementById("elevenlabs-voice-select");
+
+const librarySelect = document.getElementById("library-select");
+const libraryLoadBtn = document.getElementById("library-load-btn");
+const libraryDeleteBtn = document.getElementById("library-delete-btn");
+const librarySaveBtn = document.getElementById("library-save-btn");
+const githubTokenInput = document.getElementById("github-token");
+const libraryStatusEl = document.getElementById("library-status");
 
 const PREFS_KEY = "germanTts.prefs";
 
@@ -447,3 +458,108 @@ resumeBtn.addEventListener("click", () => {
 });
 
 stopBtn.addEventListener("click", stopCurrentEngine);
+
+// --- Library (saved texts, stored in this GitHub repo) --------------------
+
+let cachedEntries = [];
+
+function setLibraryStatus(message) {
+  libraryStatusEl.textContent = message;
+}
+
+function getGithubToken() {
+  return githubTokenInput.value.trim();
+}
+
+async function refreshLibraryList() {
+  try {
+    const { entries } = await fetchLibrary();
+    cachedEntries = entries;
+    const previousValue = librarySelect.value;
+    librarySelect.innerHTML = '<option value="">— Text auswählen —</option>';
+    entries.forEach((entry) => {
+      const option = document.createElement("option");
+      option.value = entry.title;
+      option.textContent = entry.title;
+      librarySelect.appendChild(option);
+    });
+    if (entries.some((e) => e.title === previousValue)) {
+      librarySelect.value = previousValue;
+    }
+  } catch (err) {
+    setLibraryStatus(err.message || "Fehler beim Laden der gespeicherten Texte.");
+  }
+}
+
+const savedGithubToken = loadPrefs().githubToken;
+if (savedGithubToken) githubTokenInput.value = savedGithubToken;
+
+githubTokenInput.addEventListener("change", () => {
+  savePrefs({ githubToken: githubTokenInput.value.trim() });
+});
+
+librarySaveBtn.addEventListener("click", async () => {
+  const title = titleInput.value.trim();
+  const text = textInput.value.trim();
+  if (!title) {
+    setLibraryStatus("Bitte zuerst einen Titel eingeben.");
+    return;
+  }
+  if (!text) {
+    setLibraryStatus("Bitte zuerst Text eingeben.");
+    return;
+  }
+  if (cachedEntries.some((e) => e.title === title)) {
+    const confirmed = confirm(`„${title}“ existiert bereits. Überschreiben?`);
+    if (!confirmed) return;
+  }
+
+  librarySaveBtn.disabled = true;
+  setLibraryStatus("Speichert…");
+  try {
+    await saveLibraryEntry(getGithubToken(), title, text);
+    setLibraryStatus("Gespeichert.");
+    await refreshLibraryList();
+    librarySelect.value = title;
+  } catch (err) {
+    setLibraryStatus(err.message || "Fehler beim Speichern.");
+  } finally {
+    librarySaveBtn.disabled = false;
+  }
+});
+
+libraryLoadBtn.addEventListener("click", () => {
+  const entry = cachedEntries.find((e) => e.title === librarySelect.value);
+  if (!entry) {
+    setLibraryStatus("Bitte zuerst einen gespeicherten Text auswählen.");
+    return;
+  }
+  titleInput.value = entry.title;
+  textInput.value = entry.text;
+  charCount.textContent = `${textInput.value.length} Zeichen`;
+  setLibraryStatus(`„${entry.title}“ geladen.`);
+});
+
+libraryDeleteBtn.addEventListener("click", async () => {
+  const title = librarySelect.value;
+  if (!title) {
+    setLibraryStatus("Bitte zuerst einen gespeicherten Text auswählen.");
+    return;
+  }
+  const confirmed = confirm(`„${title}“ wirklich löschen?`);
+  if (!confirmed) return;
+
+  libraryDeleteBtn.disabled = true;
+  setLibraryStatus("Löscht…");
+  try {
+    await deleteLibraryEntry(getGithubToken(), title);
+    setLibraryStatus("Gelöscht.");
+    await refreshLibraryList();
+  } catch (err) {
+    setLibraryStatus(err.message || "Fehler beim Löschen.");
+  } finally {
+    libraryDeleteBtn.disabled = false;
+  }
+});
+
+refreshLibraryList();

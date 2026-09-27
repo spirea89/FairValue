@@ -40,6 +40,27 @@ app:
 
 If that's not natural enough, switch to the ElevenLabs engine in the app.
 
+## Saving texts
+
+Texts can be saved (with a title) directly into this repo, as
+[`texts/library.txt`](./texts/library.txt) — one plain-text file, entries
+delimited by a `##### <title>` line. Reading the saved list works with no
+setup (the repo is public); saving or deleting needs a GitHub personal
+access token with write access, since a static site can't keep a shared
+write credential private:
+
+1. Create a free, fine-grained token at
+   [github.com/settings/personal-access-tokens/new](https://github.com/settings/personal-access-tokens/new),
+   scoped to **only this repository**, with **Contents: Read and write**
+   permission.
+2. Paste it into "GitHub-Zugang einrichten" in the app. It's stored only in
+   your browser's `localStorage` — never committed, never sent anywhere but
+   `api.github.com`.
+3. Give a text a title, then click "Aktuellen Text speichern". Saving with
+   an existing title overwrites that entry (with confirmation).
+
+Each save/delete creates a commit on `main` in this repo.
+
 ## Running locally
 
 No install required. From this folder:

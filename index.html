@@ -15,6 +15,11 @@
 
   <main>
     <section class="card">
+      <label for="title-input" class="title-label">
+        Titel (für's Speichern)
+        <input id="title-input" type="text" placeholder="z. B. Der Prozess – Kapitel 1" />
+      </label>
+
       <label for="text-input" class="visually-hidden">Text to read</label>
       <textarea
         id="text-input"
@@ -75,6 +80,37 @@
       </div>
 
       <p id="status" class="status" role="status" aria-live="polite"></p>
+    </section>
+
+    <section class="card">
+      <h2>Gespeicherte Texte</h2>
+
+      <div class="library-row">
+        <select id="library-select">
+          <option value="">— Text auswählen —</option>
+        </select>
+        <button id="library-load-btn" type="button">Laden</button>
+        <button id="library-delete-btn" type="button">Löschen</button>
+      </div>
+
+      <button id="library-save-btn" type="button" class="save-btn">💾 Aktuellen Text speichern</button>
+
+      <details class="token-details">
+        <summary>GitHub-Zugang einrichten (nur zum Speichern nötig)</summary>
+        <label class="api-key-label">
+          GitHub Personal Access Token
+          <input id="github-token" type="text" placeholder="Token einfügen" />
+        </label>
+        <p class="hint">
+          Kostenlosen, auf dieses Repository beschränkten Token erstellen:
+          <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">github.com/settings/personal-access-tokens/new</a>
+          — Repository access: "Only select repositories" → FairValue,
+          Permissions: "Contents" → Read and write. Wird nur in deinem
+          Browser gespeichert, nie in dieses Repository committet.
+        </p>
+      </details>
+
+      <p id="library-status" class="status" role="status" aria-live="polite"></p>
     </section>
 
     <section id="unsupported" class="card warning" hidden>
