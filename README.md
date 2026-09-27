@@ -1,23 +1,34 @@
 # German Text to Speech
 
-A small web app that reads text aloud in German, using the browser's
-built-in speech synthesis (the Web Speech API). No backend, no build step,
-no upload of your text anywhere — pure HTML/CSS/JS, deployable straight to
+A small web app that reads text aloud in German — either with the browser's
+built-in voices, or with ElevenLabs' more natural-sounding voices via your
+own free API key. No backend, no build step, no upload of your text to
+this app's servers (it has none) — pure HTML/CSS/JS, deployable straight to
 GitHub Pages.
 
 ## How it works
 
-The app uses `window.speechSynthesis`, a standard browser API for
-text-to-speech. It lists whatever German voices your browser/OS provides,
-lets you pick one, adjust rate and pitch, and reads your text aloud.
+Two selectable engines:
 
-Long text is automatically split into shorter chunks and queued as separate
-utterances — this works around a long-standing Chrome bug where speech
-synthesis silently stops after about 15 seconds on a single long utterance.
+- **Browser voice** — `window.speechSynthesis`, a standard browser API for
+  text-to-speech. Lists whatever German voices your browser/OS provides,
+  lets you pick one, adjust rate and pitch. Free, instant, no signup.
+- **ElevenLabs** — noticeably more natural/human-sounding German speech.
+  Needs a free ElevenLabs API key (no credit card, ~10,000 characters/month
+  free), entered in the app and stored only in your browser's
+  `localStorage` — it's your key and your quota, never sent anywhere but
+  ElevenLabs, and never committed to this repo.
+
+Long text is automatically split into shorter chunks either way: for the
+browser engine, this works around a long-standing Chrome bug where speech
+synthesis silently stops after about 15 seconds on a single long utterance;
+for ElevenLabs, it keeps each request comfortably under its per-request
+character limit.
 
 ## Voice quality
 
-Voice quality depends entirely on your browser and OS, not this app:
+Browser-voice quality depends entirely on your browser and OS, not this
+app:
 
 - **Chrome / Edge** tend to have the best German voices ("Google Deutsch",
   Microsoft neural voices) since they use online, cloud-quality synthesis.
@@ -27,8 +38,7 @@ Voice quality depends entirely on your browser and OS, not this app:
   check your system's language/voice settings (e.g. on macOS: System
   Settings → Accessibility → Spoken Content → System Voice → Manage Voices).
 
-If browser voices aren't good enough, the natural next step is a free
-API-based TTS service for noticeably more natural German speech.
+If that's not natural enough, switch to the ElevenLabs engine in the app.
 
 ## Running locally
 
