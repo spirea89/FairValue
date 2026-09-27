@@ -1,73 +1,34 @@
-# Fair Value
+# German Text to Speech
 
-A small web app that estimates a stock's fair value using **Peter Lynch's**
-growth-based valuation rule of thumb, with live price and fundamentals data
-pulled from Google Finance. No backend server, no build step — pure
-HTML/CSS/JS, deployable straight to GitHub Pages.
+A small web app that reads text aloud in German, using the browser's
+built-in speech synthesis (the Web Speech API). No backend, no build step,
+no upload of your text anywhere — pure HTML/CSS/JS, deployable straight to
+GitHub Pages.
 
 ## How it works
 
-Peter Lynch's heuristic (from *One Up on Wall Street*): a fairly priced
-growth stock trades at a P/E ratio equal to its annual earnings growth rate
-(PEG = 1). Optionally, dividend yield can be credited toward growth (the
-"PEGY" variant), since dividend payers need less earnings growth to deliver
-the same total return.
+The app uses `window.speechSynthesis`, a standard browser API for
+text-to-speech. It lists whatever German voices your browser/OS provides,
+lets you pick one, adjust rate and pitch, and reads your text aloud.
 
-```
-Fair P/E   = growth rate  (+ dividend yield, if enabled)
-Fair Value = EPS (TTM) × Fair P/E
-```
+Long text is automatically split into shorter chunks and queued as separate
+utterances — this works around a long-standing Chrome bug where speech
+synthesis silently stops after about 15 seconds on a single long utterance.
 
-The app pre-fills EPS and a growth rate automatically, but every input is
-editable so you can plug in your own assumptions. Dividend yield isn't
-available from this data source, so enter it manually if you want to
-include it.
+## Voice quality
 
-## Data source
+Voice quality depends entirely on your browser and OS, not this app:
 
-Price, EPS, and P/E come from **Google Finance**, via a Google Sheet that
-uses the `GOOGLEFINANCE()` function, wrapped in a small Apps Script "Web
-App" that serves it as JSON — see
-[`google-apps-script/README.md`](./google-apps-script/README.md) for the
-one-time setup. The deployed URL is set in [`js/config.js`](./js/config.js).
+- **Chrome / Edge** tend to have the best German voices ("Google Deutsch",
+  Microsoft neural voices) since they use online, cloud-quality synthesis.
+- **Safari / macOS** uses Apple's on-device German voices — solid quality,
+  works offline.
+- If no German voice shows up, your OS likely doesn't have one installed —
+  check your system's language/voice settings (e.g. on macOS: System
+  Settings → Accessibility → Spoken Content → System Voice → Manage Voices).
 
-The growth rate tries three real data sources, in order, before asking for
-manual entry — `GOOGLEFINANCE()`'s own forward growth-estimate fields
-turned out to be unreliable and often blank:
-
-1. **Nasdaq's public financials API** — a 3-year CAGR from annual net
-   income. Reliable in practice, though net income growth is a close but
-   imperfect stand-in for EPS growth (they diverge if share count has moved
-   a lot from buybacks).
-2. **The SEC's free EDGAR API** — a 5-year CAGR from real historical
-   per-share EPS, which is what Lynch's formula actually wants. This is
-   best-effort: SEC's bot protection sometimes blocks automated traffic
-   from shared cloud IPs (Google's included) with a 403, so it can fail
-   intermittently for reasons outside this app's control.
-3. **Google Finance's consensus growth estimate**, if the above both fail.
-
-If none of them have data for a stock, the app asks you to enter a growth
-rate manually — this happens automatically.
-
-This avoids the two alternatives that were tried and ruled out:
-
-- **Yahoo Finance** — its endpoints now require server-side authentication
-  (a "crumb" token) and reject unauthenticated browser requests, so a static
-  site can't call them at all anymore.
-- **Third-party APIs (Alpha Vantage, Financial Modeling Prep)** — both work,
-  but require every visitor to have their own API key and are capped by a
-  small shared daily request quota, which real usage burns through fast.
-
-Because the Google Sheet approach runs against the app owner's own Google
-account rather than a shared per-key quota, it works for every visitor with
-no setup on their end.
-
-## Versioning
-
-The footer shows the running build's version and date, so you can tell if
-your browser has the latest deploy — compare it against the version in
-[js/version.js on `main`](https://github.com/spirea89/FairValue/blob/main/js/version.js).
-If it's out of date, hard-refresh (Cmd/Ctrl+Shift+R) to bypass any cached copy.
+If browser voices aren't good enough, the natural next step is a free
+API-based TTS service for noticeably more natural German speech.
 
 ## Running locally
 
@@ -82,15 +43,6 @@ Then open http://localhost:8000.
 ## Deploying to GitHub Pages
 
 This is a static site, so GitHub Pages can serve it directly from the `main`
-branch with no build step:
-
-1. Push to `main` on GitHub.
-2. In the repo, go to **Settings → Pages**.
-3. Under **Build and deployment**, set **Source** to "Deploy from a branch",
-   branch `main`, folder `/ (root)`.
-4. Save — the site will be published at
-   `https://<username>.github.io/FairValue/`.
-
-## Disclaimer
-
-Educational tool only. Not investment advice.
+branch with no build step. Push to `main`, then in the repo go to
+**Settings → Pages** and set **Source** to "Deploy from a branch", branch
+`main`, folder `/ (root)`.

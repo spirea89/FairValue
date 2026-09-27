@@ -1,110 +1,92 @@
 <!doctype html>
-<html lang="en">
+<html lang="de">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Fair Value — Peter Lynch Stock Calculator</title>
-  <meta name="description" content="Estimate a stock's fair value using Peter Lynch's growth-based valuation formula, with live data from Yahoo Finance." />
+  <title>German Text to Speech</title>
+  <meta name="description" content="Paste text and have it read aloud in German using your browser's built-in voices." />
   <link rel="stylesheet" href="css/styles.css" />
 </head>
 <body>
   <header class="page-header">
-    <h1>Fair Value Calculator</h1>
-    <p class="subtitle">Peter Lynch–style growth valuation, using live market data</p>
+    <h1>German Text to Speech</h1>
+    <p class="subtitle">Reads your text aloud in German, using your browser's built-in voices — free, no upload.</p>
   </header>
 
   <main>
-    <form id="search-form" class="search-form" autocomplete="off">
-      <label for="ticker" class="visually-hidden">Stock ticker</label>
-      <input id="ticker" name="ticker" type="text" placeholder="Ticker, e.g. AAPL" required />
-      <button type="submit" id="search-btn">Calculate</button>
-    </form>
-
-    <p id="status" class="status" role="status" aria-live="polite"></p>
-
-    <section id="result" class="card result-card" hidden>
-      <div class="result-header">
-        <div>
-          <h2 id="company-name">—</h2>
-          <span id="company-symbol" class="ticker-badge">—</span>
-        </div>
-        <div id="verdict-badge" class="verdict-badge">—</div>
-      </div>
-      <p id="cache-note" class="hint"></p>
-
-      <div class="metrics-grid">
-        <div class="metric">
-          <span class="metric-label">Current price</span>
-          <span id="metric-price" class="metric-value">—</span>
-        </div>
-        <div class="metric">
-          <span class="metric-label">Fair value</span>
-          <span id="metric-fair-value" class="metric-value">—</span>
-        </div>
-        <div class="metric">
-          <span class="metric-label">Upside / downside</span>
-          <span id="metric-gap" class="metric-value">—</span>
-        </div>
-        <div class="metric">
-          <span class="metric-label">Trailing P/E</span>
-          <span id="metric-pe" class="metric-value">—</span>
-        </div>
+    <section class="card">
+      <label for="text-input" class="visually-hidden">Text to read</label>
+      <textarea
+        id="text-input"
+        placeholder="Text hier einfügen… (Paste German text here)"
+        rows="10"
+      ></textarea>
+      <div class="textarea-footer">
+        <span id="char-count">0 Zeichen</span>
       </div>
 
-      <details class="assumptions" open>
-        <summary>Assumptions used (editable)</summary>
-        <p class="formula-note">
-          Fair value = EPS × Fair P/E, where Fair P/E = growth rate
-          <span id="dividend-formula-part">+ dividend yield</span> — Peter Lynch's rule that a
-          fairly priced growth stock trades at a P/E equal to its earnings growth rate.
-        </p>
-        <div class="assumptions-grid">
-          <label>
-            EPS (TTM)
-            <input id="input-eps" type="number" step="0.01" />
-          </label>
-          <label>
-            Growth rate (%/yr)
-            <input id="input-growth" type="number" step="0.1" />
-          </label>
-          <label>
-            Dividend yield (%)
-            <input id="input-dividend" type="number" step="0.01" />
-          </label>
-          <label class="checkbox-label">
-            <input id="input-include-dividend" type="checkbox" />
-            Credit dividend yield toward growth (PEGY)
-          </label>
-        </div>
-        <button type="button" id="recalc-btn">Recalculate</button>
-        <p id="growth-source-note" class="hint"></p>
-      </details>
+      <div class="controls-grid">
+        <label>
+          Stimme (Voice)
+          <select id="voice-select"></select>
+        </label>
+        <label>
+          Geschwindigkeit (Rate): <span id="rate-value">1.0</span>
+          <input id="rate-input" type="range" min="0.5" max="2" step="0.05" value="1" />
+        </label>
+        <label>
+          Tonhöhe (Pitch): <span id="pitch-value">1.0</span>
+          <input id="pitch-input" type="range" min="0" max="2" step="0.05" value="1" />
+        </label>
+      </div>
+
+      <div class="button-row">
+        <button id="speak-btn" type="button">▶ Sprechen</button>
+        <button id="pause-btn" type="button" disabled>⏸ Pause</button>
+        <button id="resume-btn" type="button" disabled hidden>▶ Weiter</button>
+        <button id="stop-btn" type="button" disabled>⏹ Stopp</button>
+      </div>
+
+      <p id="status" class="status" role="status" aria-live="polite"></p>
     </section>
 
-    <section id="chart-section" class="card" hidden>
-      <h2>Price history</h2>
-      <div class="chart-controls">
-        <label for="range-select">Range</label>
-        <select id="range-select">
-          <option value="1y">1Y</option>
-          <option value="5y" selected>5Y</option>
-          <option value="max">Max</option>
-        </select>
-      </div>
-      <canvas id="price-chart" height="120"></canvas>
-      <p class="hint">Dashed line marks today's computed fair value for reference.</p>
+    <section id="unsupported" class="card warning" hidden>
+      <p>
+        Dein Browser unterstützt die Web Speech API nicht (or has no German
+        voice installed). Try Chrome, Edge, or Safari.
+      </p>
+    </section>
+
+    <section class="card hint-card">
+      <h2>Tipps für bessere Aussprache</h2>
+      <ul>
+        <li>
+          <strong>Chrome / Edge</strong> usually have the best-sounding German
+          voices ("Google Deutsch" or Microsoft neural voices) since they use
+          online, cloud-quality speech synthesis.
+        </li>
+        <li>
+          <strong>Safari / macOS</strong> uses Apple's on-device German voices
+          — good quality and works offline, but pick one explicitly in
+          System Settings → Accessibility → Spoken Content → System Voice if
+          only a low-quality default shows up here.
+        </li>
+        <li>
+          If no German voice appears in the dropdown, your OS may not have
+          one installed — check your system's language/voice settings.
+        </li>
+        <li>
+          Not happy with any of these voices? Say so and we can look into a
+          higher-quality free API-based option next.
+        </li>
+      </ul>
     </section>
   </main>
 
   <footer class="page-footer">
-    <p>
-      Data from Google Finance, via a Google Sheet. Educational tool only —
-      not investment advice.
-    </p>
-    <p id="version-info" class="version-info"></p>
+    <p>Runs entirely in your browser — no text is uploaded anywhere.</p>
   </footer>
 
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
   <script type="module" src="js/app.js"></script>
 </body>
 </html>

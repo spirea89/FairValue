@@ -1,227 +1,241 @@
-import { fetchStockData } from "./marketData.js";
-import { computeFairValue, verdictFor } from "./lynch.js";
-import { APP_VERSION, BUILD_DATE } from "./version.js";
+// German text-to-speech using the browser's built-in Web Speech API
+// (speechSynthesis). Free, no backend, no upload — everything runs locally
+// in the browser using whatever voices the OS/browser provides.
 
-document.getElementById("version-info").textContent = `Version ${APP_VERSION} · ${BUILD_DATE}`;
-
-const form = document.getElementById("search-form");
-const tickerInput = document.getElementById("ticker");
-const searchBtn = document.getElementById("search-btn");
+const textInput = document.getElementById("text-input");
+const charCount = document.getElementById("char-count");
+const voiceSelect = document.getElementById("voice-select");
+const rateInput = document.getElementById("rate-input");
+const rateValue = document.getElementById("rate-value");
+const pitchInput = document.getElementById("pitch-input");
+const pitchValue = document.getElementById("pitch-value");
+const speakBtn = document.getElementById("speak-btn");
+const pauseBtn = document.getElementById("pause-btn");
+const resumeBtn = document.getElementById("resume-btn");
+const stopBtn = document.getElementById("stop-btn");
 const statusEl = document.getElementById("status");
+const unsupportedSection = document.getElementById("unsupported");
 
-const resultSection = document.getElementById("result");
-const companyNameEl = document.getElementById("company-name");
-const companySymbolEl = document.getElementById("company-symbol");
-const verdictBadge = document.getElementById("verdict-badge");
-const cacheNote = document.getElementById("cache-note");
-const metricPrice = document.getElementById("metric-price");
-const metricFairValue = document.getElementById("metric-fair-value");
-const metricGap = document.getElementById("metric-gap");
-const metricPE = document.getElementById("metric-pe");
+const PREFS_KEY = "germanTts.prefs";
 
-const inputEps = document.getElementById("input-eps");
-const inputGrowth = document.getElementById("input-growth");
-const inputDividend = document.getElementById("input-dividend");
-const inputIncludeDividend = document.getElementById("input-include-dividend");
-const recalcBtn = document.getElementById("recalc-btn");
-const growthSourceNote = document.getElementById("growth-source-note");
-const dividendFormulaPart = document.getElementById("dividend-formula-part");
-
-const chartSection = document.getElementById("chart-section");
-const rangeSelect = document.getElementById("range-select");
-const chartCanvas = document.getElementById("price-chart");
-
-let currentPrice = null;
-let currentCurrency = "USD";
-let fullHistory = [];
-let priceChart = null;
-
-const currencyFormat = (value, currency = "USD") => {
-  if (value == null || Number.isNaN(value)) return "—";
+function loadPrefs() {
   try {
-    return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(value);
+    return JSON.parse(localStorage.getItem(PREFS_KEY)) || {};
   } catch {
-    return `$${value.toFixed(2)}`;
+    return {};
   }
-};
+}
 
-function setStatus(message, isError = false) {
+function savePrefs(patch) {
+  try {
+    const current = loadPrefs();
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ ...current, ...patch }));
+  } catch {
+    // localStorage unavailable — non-fatal, just skip persisting.
+  }
+}
+
+function setStatus(message) {
   statusEl.textContent = message;
-  statusEl.classList.toggle("error", isError);
 }
 
-function setLoading(isLoading) {
-  searchBtn.disabled = isLoading;
-  searchBtn.textContent = isLoading ? "Loading…" : "Calculate";
-}
+// --- Voice list -------------------------------------------------------
 
-function readAssumptions() {
-  return {
-    eps: inputEps.value !== "" ? parseFloat(inputEps.value) : null,
-    growthRatePct: inputGrowth.value !== "" ? parseFloat(inputGrowth.value) : null,
-    dividendYieldPct: inputDividend.value !== "" ? parseFloat(inputDividend.value) : 0,
-    includeDividend: inputIncludeDividend.checked,
-  };
-}
+let germanVoices = [];
 
-function updateResults() {
-  const { eps, growthRatePct, dividendYieldPct, includeDividend } = readAssumptions();
-  const fairValue = computeFairValue({ eps, growthRatePct, dividendYieldPct, includeDividend });
-  const verdict = verdictFor(currentPrice, fairValue);
+function refreshVoiceList() {
+  const allVoices = window.speechSynthesis.getVoices();
+  germanVoices = allVoices
+    .filter((v) => v.lang.toLowerCase().startsWith("de"))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
-  metricPrice.textContent = currencyFormat(currentPrice, currentCurrency);
-  metricFairValue.textContent = fairValue != null ? currencyFormat(fairValue, currentCurrency) : "—";
-  metricPE.textContent =
-    currentPrice != null && eps ? (currentPrice / eps).toFixed(1) : "—";
+  if (allVoices.length === 0) return; // voices not loaded yet
 
-  dividendFormulaPart.style.display = includeDividend ? "inline" : "none";
+  voiceSelect.innerHTML = "";
 
-  if (verdict) {
-    const sign = verdict.gapPct > 0 ? "+" : "";
-    metricGap.textContent = `${sign}${verdict.gapPct.toFixed(1)}%`;
-    metricGap.className = `metric-value ${verdict.gapPct >= 0 ? "positive" : "negative"}`;
-    verdictBadge.textContent = verdict.label;
-    verdictBadge.className = `verdict-badge ${
-      verdict.label === "Undervalued" ? "undervalued" : verdict.label === "Overvalued" ? "overvalued" : ""
-    }`.trim();
-  } else {
-    metricGap.textContent = "—";
-    metricGap.className = "metric-value";
-    verdictBadge.textContent = "—";
-    verdictBadge.className = "verdict-badge";
+  if (germanVoices.length === 0) {
+    unsupportedSection.hidden = false;
+    voiceSelect.disabled = true;
+    speakBtn.disabled = true;
+    return;
   }
 
-  drawFairValueLine(fairValue);
-}
-
-function populateAssumptions(data) {
-  inputEps.value = data.trailingEps ?? "";
-  inputDividend.value = data.dividendYieldPct != null ? data.dividendYieldPct.toFixed(2) : 0;
-  inputIncludeDividend.checked = false;
-  currentCurrency = data.currency;
-
-  const growth = data.growthEstimatePct;
-  if (growth != null) {
-    inputGrowth.value = growth.toFixed(1);
-    growthSourceNote.textContent = `Growth rate: ${data.growthSource}.`;
-  } else {
-    inputGrowth.value = "";
-    growthSourceNote.textContent = "No growth data available for this stock — enter a growth rate manually.";
-  }
-}
-
-function rangeToYears(range) {
-  if (range === "1y") return 1;
-  if (range === "5y") return 5;
-  return Infinity; // max
-}
-
-function drawPriceChart(range) {
-  const years = rangeToYears(range);
-  const points = Number.isFinite(years)
-    ? fullHistory.filter((p) => p.date >= new Date(Date.now() - years * 365 * 24 * 60 * 60 * 1000))
-    : fullHistory;
-
-  const labels = points.map((p) =>
-    p.date.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
-  );
-  const closes = points.map((p) => p.close);
-
-  if (priceChart) priceChart.destroy();
-
-  priceChart = new Chart(chartCanvas.getContext("2d"), {
-    type: "line",
-    data: {
-      labels,
-      datasets: [
-        {
-          label: "Price",
-          data: closes,
-          borderColor: "#2563eb",
-          backgroundColor: "rgba(37, 99, 235, 0.08)",
-          fill: true,
-          pointRadius: 0,
-          borderWidth: 2,
-          tension: 0.15,
-        },
-      ],
-    },
-    options: {
-      responsive: true,
-      interaction: { mode: "index", intersect: false },
-      scales: {
-        x: { ticks: { maxTicksLimit: 8 } },
-        y: { ticks: { callback: (v) => `$${v}` } },
-      },
-      plugins: { legend: { display: false } },
-    },
+  const prefs = loadPrefs();
+  germanVoices.forEach((voice) => {
+    const option = document.createElement("option");
+    option.value = voice.voiceURI;
+    option.textContent = `${voice.name} (${voice.lang})${voice.localService ? "" : " — online"}`;
+    voiceSelect.appendChild(option);
   });
 
-  const { eps, growthRatePct, dividendYieldPct, includeDividend } = readAssumptions();
-  drawFairValueLine(computeFairValue({ eps, growthRatePct, dividendYieldPct, includeDividend }));
+  const preferredVoice = germanVoices.find((v) => v.voiceURI === prefs.voiceURI);
+  voiceSelect.value = preferredVoice ? preferredVoice.voiceURI : germanVoices[0].voiceURI;
 }
 
-function drawFairValueLine(fairValue) {
-  if (!priceChart) return;
-  const kept = priceChart.data.datasets.filter((d) => d.label !== "Fair value");
-  if (fairValue != null) {
-    const labels = priceChart.data.labels;
-    kept.push({
-      label: "Fair value",
-      data: labels.map(() => fairValue),
-      borderColor: "#16a34a",
-      borderDash: [6, 6],
-      pointRadius: 0,
-      borderWidth: 2,
-      fill: false,
-    });
-  }
-  priceChart.data.datasets = kept;
-  priceChart.update();
+if ("speechSynthesis" in window) {
+  refreshVoiceList();
+  window.speechSynthesis.onvoiceschanged = refreshVoiceList;
+} else {
+  unsupportedSection.hidden = false;
+  speakBtn.disabled = true;
 }
 
-async function loadStock(symbol, { forceRefresh = false } = {}) {
-  setLoading(true);
-  setStatus(`Loading ${symbol}…`);
-  resultSection.hidden = true;
-  chartSection.hidden = true;
+// --- Rate / pitch -------------------------------------------------------
 
-  try {
-    const data = await fetchStockData(symbol, { forceRefresh });
-    currentPrice = data.currentPrice;
-    fullHistory = data.history;
-
-    companyNameEl.textContent = data.companyName;
-    companySymbolEl.textContent = data.symbol;
-    cacheNote.textContent = data.fromCache
-      ? "Showing cached data (refreshed within the last 6 hours) to conserve the free API quota."
-      : "";
-
-    populateAssumptions(data);
-    updateResults();
-
-    resultSection.hidden = false;
-    chartSection.hidden = fullHistory.length === 0;
-    if (!chartSection.hidden) drawPriceChart(rangeSelect.value);
-
-    setStatus("");
-  } catch (err) {
-    console.error(err);
-    setStatus(err.message || "Something went wrong fetching that stock.", true);
-  } finally {
-    setLoading(false);
-  }
+const prefs = loadPrefs();
+if (prefs.rate) {
+  rateInput.value = prefs.rate;
+  rateValue.textContent = Number(prefs.rate).toFixed(2);
+}
+if (prefs.pitch) {
+  pitchInput.value = prefs.pitch;
+  pitchValue.textContent = Number(prefs.pitch).toFixed(2);
 }
 
-form.addEventListener("submit", (e) => {
-  e.preventDefault();
-  const symbol = tickerInput.value.trim().toUpperCase();
-  if (!symbol) return;
-  loadStock(symbol);
+rateInput.addEventListener("input", () => {
+  rateValue.textContent = Number(rateInput.value).toFixed(2);
+  savePrefs({ rate: rateInput.value });
 });
 
-recalcBtn.addEventListener("click", updateResults);
-
-rangeSelect.addEventListener("change", () => {
-  if (fullHistory.length) drawPriceChart(rangeSelect.value);
+pitchInput.addEventListener("input", () => {
+  pitchValue.textContent = Number(pitchInput.value).toFixed(2);
+  savePrefs({ pitch: pitchInput.value });
 });
+
+voiceSelect.addEventListener("change", () => {
+  savePrefs({ voiceURI: voiceSelect.value });
+});
+
+// --- Character count -----------------------------------------------------
+
+textInput.addEventListener("input", () => {
+  charCount.textContent = `${textInput.value.length} Zeichen`;
+});
+
+// --- Text chunking --------------------------------------------------------
+// Chrome silently stops speaking after ~15s on a single long utterance, so
+// text is split into shorter chunks and queued as separate utterances —
+// speechSynthesis plays consecutive speak() calls back-to-back on its own.
+
+function splitIntoChunks(text, maxLen = 200) {
+  const sentences = (text.match(/[^.!?\n]+[.!?]*/g) || [text])
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const chunks = [];
+  for (const sentence of sentences) {
+    if (sentence.length <= maxLen) {
+      chunks.push(sentence);
+      continue;
+    }
+    let remaining = sentence;
+    while (remaining.length > maxLen) {
+      let cut = remaining.lastIndexOf(",", maxLen);
+      if (cut < maxLen * 0.4) cut = remaining.lastIndexOf(" ", maxLen);
+      if (cut <= 0) cut = maxLen;
+      chunks.push(remaining.slice(0, cut + 1).trim());
+      remaining = remaining.slice(cut + 1).trim();
+    }
+    if (remaining) chunks.push(remaining);
+  }
+  return chunks;
+}
+
+// --- Speaking control -----------------------------------------------------
+
+let pendingUtterances = [];
+let finishedCount = 0;
+
+function setButtonsSpeaking(isSpeaking, isPaused) {
+  speakBtn.disabled = isSpeaking;
+  stopBtn.disabled = !isSpeaking;
+  pauseBtn.hidden = isPaused;
+  pauseBtn.disabled = !isSpeaking || isPaused;
+  resumeBtn.hidden = !isPaused;
+  resumeBtn.disabled = !isPaused;
+}
+
+// Cancelling mid-speech fires async onend/onerror callbacks from the
+// utterance(s) that were in flight — this id lets stale callbacks from a
+// superseded speak() recognize they no longer apply, instead of racing with
+// (and overwriting) whatever the user just triggered (e.g. Stop).
+let speechSessionId = 0;
+
+function speak() {
+  const text = textInput.value.trim();
+  if (!text) {
+    setStatus("Bitte zuerst Text eingeben.");
+    return;
+  }
+
+  window.speechSynthesis.cancel(); // clear any previous queue
+  const sessionId = ++speechSessionId;
+
+  const selectedVoice = germanVoices.find((v) => v.voiceURI === voiceSelect.value) || germanVoices[0];
+  const chunks = splitIntoChunks(text);
+  pendingUtterances = chunks;
+  finishedCount = 0;
+
+  setStatus(`Spricht… (0/${chunks.length})`);
+  setButtonsSpeaking(true, false);
+
+  chunks.forEach((chunk, index) => {
+    const utterance = new SpeechSynthesisUtterance(chunk);
+    utterance.voice = selectedVoice;
+    utterance.lang = selectedVoice ? selectedVoice.lang : "de-DE";
+    utterance.rate = Number(rateInput.value);
+    utterance.pitch = Number(pitchInput.value);
+
+    utterance.onend = () => {
+      if (sessionId !== speechSessionId) return;
+      finishedCount += 1;
+      if (finishedCount < chunks.length) {
+        setStatus(`Spricht… (${finishedCount}/${chunks.length})`);
+      } else {
+        setStatus("Fertig.");
+        setButtonsSpeaking(false, false);
+      }
+    };
+
+    utterance.onerror = (e) => {
+      if (sessionId !== speechSessionId) return;
+      if (e.error === "canceled" || e.error === "interrupted") return;
+      setStatus(`Fehler: ${e.error}`);
+      setButtonsSpeaking(false, false);
+    };
+
+    window.speechSynthesis.speak(utterance);
+  });
+}
+
+function pause() {
+  window.speechSynthesis.pause();
+  setStatus("Pausiert.");
+  setButtonsSpeaking(true, true);
+}
+
+function resume() {
+  window.speechSynthesis.resume();
+  setStatus(`Spricht… (${finishedCount}/${pendingUtterances.length})`);
+  setButtonsSpeaking(true, false);
+}
+
+function stop() {
+  speechSessionId += 1; // invalidate any in-flight callbacks from the cancelled utterances
+  window.speechSynthesis.cancel();
+  setStatus("Gestoppt.");
+  setButtonsSpeaking(false, false);
+}
+
+speakBtn.addEventListener("click", speak);
+pauseBtn.addEventListener("click", pause);
+resumeBtn.addEventListener("click", resume);
+stopBtn.addEventListener("click", stop);
+
+// Some browsers (notably Chrome) silently drop the speech queue if the tab
+// is backgrounded for a while — reset the UI if that happens.
+setInterval(() => {
+  if (!window.speechSynthesis.speaking && !window.speechSynthesis.pending && !stopBtn.disabled) {
+    setButtonsSpeaking(false, false);
+  }
+}, 1000);
