@@ -10,7 +10,7 @@
 <body>
   <header class="page-header">
     <h1>German Text to Speech</h1>
-    <p class="subtitle">Reads your text aloud in German, using your browser's built-in voices — free, no upload.</p>
+    <p class="subtitle">Reads your text aloud in German — free browser voices, or more natural ElevenLabs voices with your own free API key.</p>
   </header>
 
   <main>
@@ -25,7 +25,18 @@
         <span id="char-count">0 Zeichen</span>
       </div>
 
-      <div class="controls-grid">
+      <div class="engine-selector">
+        <label>
+          <input type="radio" name="engine" value="browser" checked />
+          Browser-Stimme (kostenlos, sofort einsatzbereit)
+        </label>
+        <label>
+          <input type="radio" name="engine" value="elevenlabs" />
+          ElevenLabs (natürlicher, braucht kostenlosen API-Key)
+        </label>
+      </div>
+
+      <div id="browser-controls" class="controls-grid">
         <label>
           Stimme (Voice)
           <select id="voice-select"></select>
@@ -39,6 +50,22 @@
           <input id="pitch-input" type="range" min="0" max="2" step="0.05" value="1" />
         </label>
       </div>
+
+      <div id="elevenlabs-controls" class="controls-grid" hidden>
+        <label class="api-key-label">
+          ElevenLabs API-Key
+          <input id="elevenlabs-key" type="text" placeholder="API-Key einfügen" />
+        </label>
+        <label>
+          Stimme
+          <select id="elevenlabs-voice-select"></select>
+        </label>
+      </div>
+      <p id="elevenlabs-hint" class="hint" hidden>
+        Kostenlosen Key holen: <a href="https://elevenlabs.io/app/sign-up" target="_blank" rel="noopener">elevenlabs.io</a>
+        (kein Kreditkarte nötig, ca. 10.000 Zeichen/Monat gratis). Wird nur in
+        deinem Browser gespeichert.
+      </p>
 
       <div class="button-row">
         <button id="speak-btn" type="button">▶ Sprechen</button>
@@ -76,8 +103,9 @@
           one installed — check your system's language/voice settings.
         </li>
         <li>
-          Not happy with any of these voices? Say so and we can look into a
-          higher-quality free API-based option next.
+          Still not natural enough? Switch to <strong>ElevenLabs</strong>
+          above for noticeably more human-sounding German speech, using your
+          own free API key.
         </li>
       </ul>
     </section>
